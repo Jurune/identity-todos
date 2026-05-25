@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>多重身份待办 · 设计稿 v2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif; background: #f5f5f7; color: #1d1d1f; padding: 40px 20px; }
+  
+  .nav { display: flex; gap: 8px; justify-content: center; margin-bottom: 32px; flex-wrap: wrap; }
+  .nav button { padding: 8px 16px; border-radius: 20px; border: 1px solid #d2d2d7; background: white; cursor: pointer; font-size: 12px; font-weight: 500; color: #1d1d1f; transition: all .2s; }
+  .nav button.active { background: #1d1d1f; color: white; border-color: #1d1d1f; }
+  .nav button:hover { border-color: #0071e3; color: #0071e3; }
+
+  .phone-frame { max-width: 390px; margin: 0 auto; background: white; border-radius: 32px; box-shadow: 0 8px 40px rgba(0,0,0,.08); overflow: hidden; padding: 24px 20px 20px; min-height: 780px; position: relative; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .status-bar { display: flex; justify-content: space-between; font-size: 12px; color: #86868b; margin-bottom: 16px; }
+  .greeting { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .greeting-sub { font-size: 13px; color: #86868b; margin-bottom: 16px; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 6px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 4px; }
+  .tab { padding: 6px 14px; border-radius: 16px; font-size: 13px; font-weight: 500; white-space: nowrap; border: none; cursor: pointer; background: #f5f5f7; color: #86868b; transition: all .2s; flex-shrink: 0; }
+  .tab.active { background: #1d1d1f; color: white; }
+  .tab.designer-tab { background: #e8f5e9; color: #2e7d32; }
+  .tab.designer-tab.active { background: #2e7d32; color: white; }
+  .tab.alone-tab { background: #e3f2fd; color: #1565c0; }
+  .tab.alone-tab.active { background: #1565c0; color: white; }
+  .tab.travel-tab { background: #fff3e0; color: #e65100; }
+  .tab.travel-tab.active { background: #e65100; color: white; }
+  .tab.child-tab { background: #fce4ec; color: #c62828; }
+  .tab.child-tab.active { background: #c62828; color: white; }
+  .tab-count { opacity: .6; margin-left: 4px; }
+
+  /* timeline - block style */
+  .timeline { position: relative; padding-left: 50px; }
+  .time-scale { position: absolute; left: 0; top: 0; bottom: 0; width: 42px; display: flex; flex-direction: column; }
+  .time-label { font-size: 11px; color: #86868b; height: 60px; display: flex; align-items: flex-start; justify-content: flex-end; padding-right: 8px; line-height: 1; }
+  .timeline-block { position: relative; margin-bottom: 2px; border-radius: 10px; padding: 8px 12px; display: flex; gap: 10px; align-items: flex-start; transition: all .2s; cursor: pointer; }
+  .timeline-block:hover { filter: brightness(0.97); }
+  .timeline-block .block-time { font-size: 11px; font-weight: 600; opacity: .8; min-width: 52px; flex-shrink: 0; }
+  .timeline-block .block-body { flex: 1; min-width: 0; }
+  .timeline-block .block-title { font-size: 14px; font-weight: 600; line-height: 1.3; }
+  .timeline-block .block-meta { font-size: 11px; margin-top: 3px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; opacity: .85; }
+  .timeline-block.designer-block { background: #e8f5e9; color: #1b5e20; }
+  .timeline-block.designer-block .block-time, .timeline-block.designer-block .block-meta { color: #33691e; }
+  .timeline-block.alone-block { background: #e3f2fd; color: #0d47a1; }
+  .timeline-block.alone-block .block-time, .timeline-block.alone-block .block-meta { color: #1565c0; }
+  .timeline-block.travel-block { background: #fff3e0; color: #bf360c; }
+  .timeline-block.travel-block .block-time, .timeline-block.travel-block .block-meta { color: #e65100; }
+  .timeline-block.child-block { background: #fce4ec; color: #880e4f; }
+  .timeline-block.child-block .block-time, .timeline-block.child-block .block-meta { color: #c62828; }
+  .timeline-block.done { opacity: .6; position: relative; }
+  .timeline-block.done::after { content: '✓'; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 16px; font-weight: 700; color: #34c759; }
+  .timeline-block.highlight { box-shadow: 0 0 0 2px rgba(0,113,227,.25); }
+  .block-tag { display: inline-block; padding: 1px 6px; border-radius: 5px; font-size: 10px; font-weight: 600; background: rgba(255,255,255,.5); }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 8px; font-size: 11px; font-weight: 500; }
+  .tag-designer { background: #e8f5e9; color: #2e7d32; }
+  .tag-alone { background: #e3f2fd; color: #1565c0; }
+  .tag-travel { background: #fff3e0; color: #e65100; }
+  .tag-child { background: #fce4ec; color: #c62828; }
+  .tag-project { background: #f3e8ff; color: #7c3aed; }
+
+  .progress-bar { width: 100%; height: 4px; background: #e8e8ed; border-radius: 2px; margin: 12px 0 4px; overflow: hidden; }
+  .progress-bar-inner { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #34c759, #30d158); transition: width .5s; }
+
+  /* pending */
+  .pending-section { margin-top: 20px; border-top: 1px solid #e8e8ed; padding-top: 16px; }
+  .pending-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  .pending-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #f5f5f7; border-radius: 12px; margin-bottom: 8px; cursor: pointer; transition: all .2s; }
+  .pending-item:hover { background: #e8e8ed; }
+  .pending-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .pending-info { flex: 1; }
+  .pending-name { font-size: 14px; font-weight: 500; }
+  .pending-desc { font-size: 12px; color: #86868b; }
+  .badge { padding: 4px 10px; border-radius: 10px; font-size: 11px; font-weight: 500; background: #0071e3; color: white; }
+
+  /* add btn */
+  .add-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px; background: #1d1d1f; color: white; border: none; border-radius: 14px; font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 16px; transition: all .2s; }
+  .add-btn:hover { background: #000; }
+
+  /* back */
+  .back-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: #0071e3; cursor: pointer; margin-bottom: 20px; border: none; background: none; padding: 0; }
+
+  /* goal breakdown */
+  .goal-header { margin-bottom: 20px; }
+  .goal-name { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .goal-meta { font-size: 13px; color: #86868b; }
+  .section-title { font-size: 14px; font-weight: 600; color: #86868b; margin-bottom: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  .task-card { display: flex; align-items: flex-start; gap: 12px; padding: 14px; background: #f5f5f7; border-radius: 14px; margin-bottom: 10px; border: 1px solid transparent; transition: all .2s; }
+  .task-card:hover { border-color: #d2d2d7; }
+  .task-check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #c7c7cc; flex-shrink: 0; margin-top: 2px; cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; }
+  .task-check.done { background: #34c759; border-color: #34c759; }
+  .task-check.done::after { content: '✓'; color: white; font-size: 12px; font-weight: 700; }
+  .task-info { flex: 1; }
+  .task-name { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .task-time { font-size: 12px; color: #86868b; }
+  .prio-tag { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; background: #fef3e0; color: #e65100; }
+  .prio-tag.high { background: #fce4ec; color: #c62828; }
+
+  .btn-row { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+  .btn { padding: 8px 20px; border-radius: 20px; border: 1px solid #d2d2d7; background: white; font-size: 13px; font-weight: 500; cursor: pointer; transition: all .2s; }
+  .btn.primary { background: #0071e3; color: white; border-color: #0071e3; }
+  .btn.primary:hover { background: #005bbf; }
+  .btn.danger { color: #ff3b30; border-color: #ff3b30; }
+  .btn.danger:hover { background: #fff5f5; }
+
+  /* conflict */
+  .conflict-intro { font-size: 14px; color: #86868b; margin-bottom: 20px; }
+  .conflict-date { font-size: 13px; font-weight: 600; color: #1d1d1f; margin-bottom: 16px; }
+  .conflict-card { display: flex; gap: 14px; padding: 16px; border-radius: 16px; margin-bottom: 12px; cursor: pointer; transition: all .2s; border: 2px solid transparent; }
+  .conflict-card:hover { border-color: #d2d2d7; }
+  .conflict-card.selected { border-color: #0071e3; background: #f0f7ff; }
+  .conflict-card.a { background: #fce4ec; }
+  .conflict-card.b { background: #e3f2fd; }
+  .conflict-card.selected.a { border-color: #c62828; }
+  .conflict-card.selected.b { border-color: #1565c0; }
+  .conflict-letter { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: white; flex-shrink: 0; }
+  .conflict-letter.a-bg { background: #c62828; }
+  .conflict-letter.b-bg { background: #1565c0; }
+  .conflict-info { flex: 1; }
+  .conflict-title { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .conflict-meta { font-size: 12px; color: #86868b; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .conflict-history { margin-top: 16px; padding: 12px; background: #f5f5f7; border-radius: 12px; font-size: 13px; color: #86868b; line-height: 1.6; }
+  .conflict-history strong { color: #1d1d1f; }
+  .conflict-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .conflict-btn { flex: 1; padding: 12px; border-radius: 14px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .2s; }
+  .conflict-btn.primary { background: #0071e3; color: white; }
+  .conflict-btn.primary:hover { background: #005bbf; }
+  .conflict-btn.secondary { background: #f5f5f7; color: #86868b; }
+  .conflict-btn.secondary:hover { background: #e8e8ed; }
+
+  /* ============ PAGE 10: 每周一页 ============ */
+  .weekly-page-wrap { display: flex; flex-direction: column; align-items: center; }
+  .week-label-tag { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; background: #f0f7ff; color: #0071e3; margin-bottom: 12px; }
+  .quote-card { width: 100%; background: #faf5ee; border-radius: 20px; padding: 28px 24px; margin-bottom: 16px; position: relative; }
+  .quote-mark { font-size: 48px; color: #e8d5b7; line-height: 1; margin-bottom: -8px; font-family: Georgia, serif; }
+  .quote-text { font-size: 18px; font-weight: 500; line-height: 1.8; color: #3d3027; margin-bottom: 20px; }
+  .quote-author { font-size: 13px; color: #8b7355; text-align: right; }
+  .quote-divider { border: none; border-top: 1px solid #e8d5b7; margin: 16px 0; }
+  .quote-book { font-size: 12px; color: #8b7355; font-style: italic; }
+
+  .context-note { width: 100%; padding: 16px; background: #f5f5f7; border-radius: 14px; margin-bottom: 16px; font-size: 13px; line-height: 1.7; color: #1d1d1f; }
+  .context-note .highlight { background: linear-gradient(180deg, transparent 60%, #fef3e0 60%); }
+
+  .week-question { width: 100%; padding: 16px; background: #1d1d1f; border-radius: 14px; color: white; font-size: 14px; font-weight: 600; text-align: center; line-height: 1.6; margin-bottom: 12px; }
+
+  .quote-actions { display: flex; gap: 10px; width: 100%; }
+  .quote-action { flex: 1; padding: 12px; border-radius: 14px; border: none; font-size: 13px; font-weight: 500; cursor: pointer; transition: all .2s; text-align: center; }
+  .quote-action.primary { background: #0071e3; color: white; flex: 2; }
+  .quote-action.primary:hover { background: #005bbf; }
+  .quote-action.outline { background: white; border: 1px solid #d2d2d7; color: #1d1d1f; }
+  .quote-action.outline:hover { background: #f5f5f7; }
+
+  /* ============ PAGE 4: 添加待办 ============ */
+  .add-overlay { background: rgba(0,0,0,.04); margin: -24px -20px -20px; padding: 24px 20px 20px; min-height: 720px; }
+  
+  .input-card { background: white; border-radius: 20px; padding: 20px; box-shadow: 0 2px 16px rgba(0,0,0,.06); }
+  .input-main { width: 100%; border: none; font-size: 16px; font-weight: 500; padding: 12px 0; outline: none; color: #1d1d1f; }
+  .input-main::placeholder { color: #c7c7cc; }
+  .input-hint { font-size: 13px; color: #86868b; margin-bottom: 16px; line-height: 1.5; }
+
+  .ai-suggest { background: #f0f7ff; border-radius: 14px; padding: 14px; margin-bottom: 16px; }
+  .ai-suggest-title { font-size: 12px; color: #0071e3; font-weight: 600; margin-bottom: 8px; }
+  .ai-field { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+  .ai-field-label { font-size: 12px; color: #86868b; min-width: 44px; }
+  .ai-field-value { font-size: 13px; font-weight: 500; color: #1d1d1f; }
+  .ai-field-value .tag { margin-right: 4px; }
+
+  .type-toggle { display: flex; gap: 0; margin: 16px 0; background: #f5f5f7; border-radius: 12px; padding: 3px; }
+  .type-btn { flex: 1; padding: 10px; border: none; border-radius: 10px; font-size: 13px; font-weight: 500; cursor: pointer; background: transparent; color: #86868b; transition: all .2s; text-align: center; }
+  .type-btn.active { background: white; color: #1d1d1f; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+
+  .fuzzy-example { font-size: 12px; color: #86868b; margin-top: 4px; padding: 8px 12px; background: #fef3e0; border-radius: 8px; display: none; }
+  .fuzzy-example.show { display: block; }
+
+  .submit-row { display: flex; gap: 8px; margin-top: 16px; }
+  .submit-btn { flex: 1; padding: 14px; border-radius: 14px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .submit-btn.primary { background: #0071e3; color: white; }
+  .submit-btn.secondary { background: #f5f5f7; color: #1d1d1f; }
+
+  /* ============ PAGE 5: 身份管理 ============ */
+  .identity-card { display: flex; align-items: center; gap: 14px; padding: 16px; background: #f5f5f7; border-radius: 16px; margin-bottom: 10px; transition: all .2s; }
+  .identity-card:first-child { border: 1px solid #d2d2d7; background: white; }
+  .identity-avatar { width: 48px; height: 48px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+  .identity-avatar.designer-bg { background: #e8f5e9; }
+  .identity-avatar.alone-bg { background: #e3f2fd; }
+  .identity-avatar.travel-bg { background: #fff3e0; }
+  .identity-avatar.child-bg { background: #fce4ec; }
+  .identity-info { flex: 1; }
+  .identity-name { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
+  .identity-stats { font-size: 12px; color: #86868b; }
+  .identity-arrow { color: #c7c7cc; font-size: 16px; }
+
+  .add-identity { display: flex; align-items: center; gap: 10px; padding: 16px; border: 2px dashed #d2d2d7; border-radius: 16px; cursor: pointer; transition: all .2s; margin-top: 12px; }
+  .add-identity:hover { border-color: #0071e3; color: #0071e3; }
+  .add-identity-icon { width: 40px; height: 40px; border-radius: 12px; background: #f5f5f7; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+
+  /* ============ PAGE 6: 跨项目共享 ============ */
+  .share-hint { padding: 14px; background: #f0f7ff; border-radius: 14px; margin-bottom: 20px; font-size: 13px; line-height: 1.5; color: #1d1d1f; }
+  .share-hint-icon { font-size: 20px; margin-bottom: 6px; }
+
+  .share-connection { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 16px; margin-bottom: 12px; background: #f5f5f7; }
+  .share-from { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .share-node { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .share-arrow { font-size: 16px; color: #c7c7cc; }
+  .share-to-node { background: #f3e8ff; }
+  .share-to { flex: 1; }
+  .share-item-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .share-desc { font-size: 12px; color: #86868b; line-height: 1.4; margin-bottom: 10px; }
+  .share-actions-row { display: flex; gap: 6px; }
+  .share-action { padding: 6px 14px; border-radius: 12px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; transition: all .2s; }
+  .share-action.mark { background: #e8f5e9; color: #2e7d32; }
+  .share-action.ignore { background: #f5f5f7; color: #86868b; }
+
+  /* ============ PAGE 7: 周报 ============ */
+  .week-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .week-header .week-label { font-size: 16px; font-weight: 700; }
+  .week-nav { display: flex; gap: 8px; }
+  .week-nav-btn { width: 32px; height: 32px; border-radius: 50%; border: 1px solid #d2d2d7; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+
+  .donut-row { display: flex; gap: 20px; align-items: center; margin-bottom: 24px; }
+  .donut { width: 120px; height: 120px; border-radius: 50%; position: relative; flex-shrink: 0; background: conic-gradient(#2e7d32 0% 35%, #1565c0 35% 65%, #e65100 65% 80%, #c62828 80% 100%); }
+  .donut::after { content: '42h'; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 20px; font-weight: 700; }
+  .donut-legend { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+  .legend-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .legend-dot.designer-dot { background: #2e7d32; }
+  .legend-dot.alone-dot { background: #1565c0; }
+  .legend-dot.travel-dot { background: #e65100; }
+  .legend-dot.child-dot { background: #c62828; }
+
+  .weekly-insight { padding: 16px; background: #f0f7ff; border-radius: 14px; margin-bottom: 20px; }
+  .weekly-insight-title { font-size: 12px; color: #0071e3; font-weight: 600; margin-bottom: 6px; }
+  .weekly-insight-text { font-size: 13px; line-height: 1.6; color: #1d1d1f; }
+
+  .weekly-stats { display: grid; gap: 8px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #f5f5f7; border-radius: 10px; font-size: 13px; }
+  .stat-label { font-weight: 500; }
+  .stat-value { color: #86868b; }
+  .stat-value.green { color: #34c759; font-weight: 600; }
+
+  /* ============ PAGE 9: 完成留痕 ============ */
+  .complete-header { text-align: center; margin-bottom: 20px; }
+  .complete-icon { font-size: 40px; margin-bottom: 8px; }
+  .complete-task { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+  .complete-meta { font-size: 12px; color: #86868b; }
+
+  .upload-area { border: 2px dashed #d2d2d7; border-radius: 16px; padding: 32px 20px; text-align: center; margin-bottom: 16px; cursor: pointer; transition: all .2s; }
+  .upload-area:hover { border-color: #0071e3; background: #f0f7ff; }
+  .upload-area.has-file { border-style: solid; border-color: #34c759; background: #f0fdf4; }
+  .upload-icon { font-size: 28px; margin-bottom: 8px; }
+  .upload-text { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .upload-hint { font-size: 12px; color: #86868b; }
+
+  .time-adjust { display: flex; align-items: center; gap: 12px; padding: 14px; background: #f5f5f7; border-radius: 14px; margin-bottom: 12px; }
+  .time-adjust-icon { font-size: 20px; }
+  .time-info { flex: 1; }
+  .time-info-label { font-size: 12px; color: #86868b; }
+  .time-slider-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .time-val { font-size: 14px; font-weight: 600; }
+  .time-btn { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #d2d2d7; background: white; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all .2s; }
+  .time-btn:hover { background: #f0f0f0; }
+
+  .ai-comment-placeholder { padding: 14px; background: #f0f7ff; border-radius: 14px; margin-bottom: 12px; }
+  .ai-comment-label { font-size: 12px; color: #0071e3; font-weight: 600; margin-bottom: 6px; }
+  .ai-comment-text { font-size: 13px; line-height: 1.6; color: #1d1d1f; }
+
+  .gap-notice { padding: 14px; background: #fff3e0; border-radius: 14px; margin-bottom: 12px; font-size: 13px; line-height: 1.5; }
+  .gap-notice-icon { font-size: 18px; margin-bottom: 4px; }
+
+  /* ============ PAGE 8: 项目视图 ============ */
+  .project-section { margin-bottom: 24px; }
+  .project-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .project-section-name { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .project-count-badge { font-size: 11px; background: #f3e8ff; color: #7c3aed; padding: 2px 10px; border-radius: 10px; }
+  .project-todo { padding: 10px 12px; background: #f5f5f7; border-radius: 10px; margin-bottom: 6px; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  .project-todo-icon { font-size: 14px; }
+  .project-todo-date { font-size: 11px; color: #86868b; margin-left: auto; }
+  .shared-kb { margin-top: 12px; padding: 12px; background: #f3e8ff; border-radius: 12px; }
+  .shared-kb-title { font-size: 12px; font-weight: 600; color: #7c3aed; margin-bottom: 8px; }
+  .shared-kb-item { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; }
+  .shared-kb-item:not(:last-child) { border-bottom: 1px solid #e8e0f7; }
+  .shared-kb-arrow { color: #0071e3; font-size: 12px; margin-left: auto; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <button class="active" onclick="show('p1')">📅 日程</button>
+  <button onclick="show('p2')">🌫️ 目标拆解</button>
+  <button onclick="show('p3')">⚡ 冲突</button>
+  <button onclick="show('p4')">➕ 添加</button>
+  <button onclick="show('p5')">👤 身份</button>
+  <button onclick="show('p6')">🧩 共享</button>
+  <button onclick="show('p7')">📊 周报</button>
+  <button onclick="show('p8')">📁 项目</button>
+  <button onclick="show('p9')">✅ 完成</button>
+  <button onclick="show('p10')">📖 每周一页</button>
+</div>
+
+<div class="phone-frame">
+
+<!-- ====== P1: 日程时间轴 ====== -->
+<div class="page active" id="p1">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <div class="greeting">🐾 早上好，姐姐</div>
+  <div class="greeting-sub">🗓️ 5月6日 · 周三 · 7件待办</div>
+  <div class="progress-bar" style="margin-bottom:4px"><div class="progress-bar-inner" style="width:43%"></div></div>
+  <div style="font-size:11px;color:#86868b;margin-bottom:12px">已完成 3/7 · 今天排得不多，舒服</div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="filterTimeline('all')">全部 <span class="tab-count">7</span></button>
+    <button class="tab designer-tab" onclick="filterTimeline('designer')">🏢 设计师 <span class="tab-count">2</span></button>
+    <button class="tab alone-tab" onclick="filterTimeline('alone')">🏠 独身者 <span class="tab-count">3</span></button>
+    <button class="tab travel-tab" onclick="filterTimeline('travel')">✈️ 旅行 <span class="tab-count">1</span></button>
+    <button class="tab child-tab" onclick="filterTimeline('child')">👨‍👩‍👧 子女 <span class="tab-count">1</span></button>
+  </div>
+
+  <div class="timeline">
+    <!-- time scale column -->
+    <div class="time-scale">
+      <div class="time-label">08</div>
+      <div class="time-label">09</div>
+      <div class="time-label">10</div>
+      <div class="time-label">11</div>
+      <div class="time-label">12</div>
+      <div class="time-label">13</div>
+      <div class="time-label">14</div>
+      <div class="time-label">15</div>
+      <div class="time-label">16</div>
+    </div>
+
+    <!-- blocks: height = duration (60px = 1hr) -->
+    <div class="timeline-block alone-block done" style="height:30px;margin-top:0" data-identity="alone">
+      <div class="block-time">08:00 ▸ 08:30</div>
+      <div class="block-body"><div class="block-title">🌅 起床</div></div>
+    </div>
+
+    <div class="timeline-block alone-block done" style="height:30px" data-identity="alone">
+      <div class="block-time">08:30 ▸ 09:00</div>
+      <div class="block-body"><div class="block-title">🎧 听力</div><div class="block-meta">30分钟 · 雅思听力</div></div>
+    </div>
+
+    <div class="timeline-block designer-block highlight" style="height:90px" data-identity="designer">
+      <div class="block-time">09:00 ▸ 10:30</div>
+      <div class="block-body">
+        <div class="block-title">📝 PRD 评审会</div>
+        <div class="block-meta"><span class="block-tag">A 项目</span> 飞书 · 1.5h</div>
+      </div>
+    </div>
+
+    <div class="timeline-block designer-block" style="height:90px" data-identity="designer">
+      <div class="block-time">10:30 ▸ 12:00</div>
+      <div class="block-body">
+        <div class="block-title">💬 业务对齐会</div>
+        <div class="block-meta"><span class="block-tag">B 项目</span> 1.5h</div>
+      </div>
+    </div>
+
+    <div class="timeline-block alone-block" style="height:60px" data-identity="alone">
+      <div class="block-time">12:00 ▸ 13:00</div>
+      <div class="block-body"><div class="block-title">🍜 午饭</div><div class="block-meta">1h</div></div>
+    </div>
+
+    <!-- 13:00-14:00 gap -->
+    <div class="timeline-gap" style="height:60px;position:relative;display:flex;align-items:center;justify-content:center">
+      <span style="font-size:11px;color:#c7c7cc">— 空闲 —</span>
+    </div>
+
+    <div class="timeline-block child-block" style="height:60px" data-identity="child">
+      <div class="block-time">14:00 ▸ 15:00</div>
+      <div class="block-body">
+        <div class="block-title">💊 带妈妈去社区医院</div>
+        <div class="block-meta">👨‍👩‍👧 子女 · 1h</div>
+      </div>
+    </div>
+
+    <div class="timeline-block travel-block" style="height:60px" data-identity="travel">
+      <div class="block-time">15:00 ▸ 16:00</div>
+      <div class="block-body">
+        <div class="block-title">🗺️ 看国庆北海道攻略</div>
+        <div class="block-meta">✈️ 旅行 · 1h</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="pending-section">
+    <div class="pending-title">📌 待确认 <span style="font-weight:400;color:#86868b">(2)</span></div>
+    <div class="pending-item" onclick="show('p2')">
+      <div class="pending-icon" style="background:#fef3e0">🌫️</div>
+      <div class="pending-info"><div class="pending-name">7月英语突飞猛进</div><div class="pending-desc">AI 已拆解 · 轻触查看</div></div>
+      <span class="badge">拆解完成</span>
+    </div>
+    <div class="pending-item">
+      <div class="pending-icon" style="background:#fce4ec">⬆️</div>
+      <div class="pending-info"><div class="pending-name">存够 5 万旅行基金</div><div class="pending-desc">目标 · 待拆解</div></div>
+    </div>
+  </div>
+
+  <button class="add-btn" onclick="show('p4')">+ 添加待办</button>
+</div>
+
+<!-- ====== P2: 模糊目标拆解 ====== -->
+<div class="page" id="p2">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <button class="back-btn" onclick="show('p1')">← 返回日程</button>
+
+  <div class="goal-header">
+    <div class="goal-name">🌫️ 7月英语突飞猛进</div>
+    <div class="goal-meta">🏠 独身者 · 创建于 5月5日</div>
+  </div>
+
+  <div style="padding:12px; background:#f0f7ff; border-radius:12px; margin-bottom:20px; font-size:13px; line-height:1.5">
+    💡 姐姐，我帮你把这个目标拆成了以下任务。你可以勾选要排入日程的，也可以告诉我调整顺序。
+  </div>
+
+  <div class="section-title">AI 拆解方案</div>
+
+  <div class="task-card">
+    <div class="task-check done"></div>
+    <div class="task-info"><div class="task-name">📅 每周一三五 · 听力 30 分钟</div><div class="task-time">08:00 - 08:30 · 通勤前</div></div>
+    <div class="prio-tag high">排第一</div>
+  </div>
+  <div class="task-card">
+    <div class="task-check done"></div>
+    <div class="task-info"><div class="task-name">📅 每天通勤 · 背单词 20 个</div><div class="task-time">通勤路上 · 使用 App</div></div>
+    <div class="prio-tag">排第二</div>
+  </div>
+  <div class="task-card">
+    <div class="task-check"></div>
+    <div class="task-info"><div class="task-name">📅 每周六 · 外教口语 1 小时</div><div class="task-time">14:00 - 15:00 · Cambly</div></div>
+    <div class="prio-tag">排第三</div>
+  </div>
+  <div class="task-card">
+    <div class="task-check"></div>
+    <div class="task-info"><div class="task-name">📅 7月28日 · 雅思模拟考</div><div class="task-time">全程 3 小时 · 线下考点</div></div>
+    <div class="prio-tag">排第四</div>
+  </div>
+
+  <div class="task-card" style="border: 1px dashed #d2d2d7;">
+    <div class="task-info" style="flex:1">
+      <div style="font-size:13px; color:#86868b;">想调整顺序或内容？直接跟我说 👇</div>
+      <div style="font-size:14px; font-weight:500; margin-top:4px; color:#0071e3;">"把外教口语提到最前面"</div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn primary">✅ 排入日程</button>
+    <button class="btn">✏️ 修改方案</button>
+    <button class="btn danger">🗑️ 删除目标</button>
+  </div>
+</div>
+
+<!-- ====== P3: 排期冲突 ====== -->
+<div class="page" id="p3">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <button class="back-btn" onclick="show('p1')">← 返回日程</button>
+
+  <div style="margin-bottom:12px"><span style="font-size:20px;font-weight:700;">⚡ 排期冲突</span></div>
+  <div class="conflict-intro">5月10日（周六）下午 14:00 - 15:00 有两个事务撞车了。</div>
+  <div class="conflict-date">📅 5月10日 · 周六 · 14:00–15:00</div>
+
+  <div class="conflict-card a selected" onclick="select('a')">
+    <div class="conflict-letter a-bg">A</div>
+    <div class="conflict-info">
+      <div class="conflict-title">💊 带妈妈体检</div>
+      <div class="conflict-meta"><span class="tag tag-child">👨‍👩‍👧 子女</span>协和医院 · 需预约</div>
+    </div>
+  </div>
+  <div class="conflict-card b" onclick="select('b')">
+    <div class="conflict-letter b-bg">B</div>
+    <div class="conflict-info">
+      <div class="conflict-title">🗣️ 外教口语课</div>
+      <div class="conflict-meta"><span class="tag tag-alone">🏠 独身者</span>Cambly · 每周例行</div>
+    </div>
+  </div>
+
+  <div class="conflict-history">
+    你最近 3 次的选择记录：<br>
+    🅰️ 带妈妈体检 — <strong>选了 2 次</strong><br>
+    🅱️ 外教口语课 — <strong>选了 1 次</strong><br>
+    系统学习到：🅰️ 类型事务的优先级在上升
+  </div>
+
+  <div style="font-size:12px;color:#86868b;margin:12px 0;">点卡片选中，然后确定 👇</div>
+  <div class="conflict-actions">
+    <button class="conflict-btn primary">确定</button>
+    <button class="conflict-btn secondary">⏰ 都改天</button>
+  </div>
+</div>
+
+<!-- ====== P4: 添加待办 ====== -->
+<div class="page" id="p4">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <button class="back-btn" onclick="show('p1')">← 返回日程</button>
+
+  <div class="input-card">
+    <div style="font-size:18px;font-weight:700;margin-bottom:4px;">✏️ 添加待办</div>
+    <input class="input-main" type="text" placeholder="输入你想做的事..." value="7月英语突飞猛进" style="margin-top:12px">
+    <div class="input-hint">可以是一句话待办，也可以是一个大目标</div>
+
+    <div class="type-toggle">
+      <button class="type-btn" onclick="toggleType('clear')">✅ 明确待办</button>
+      <button class="type-btn active" onclick="toggleType('fuzzy')">🌫️ 大目标</button>
+    </div>
+
+    <div class="fuzzy-example show">像这样：「今年学会自由泳」「带爸妈去一次海南」「每天睡前读半小时书」——AI 会帮你拆成任务。</div>
+
+    <div class="ai-suggest">
+      <div class="ai-suggest-title">🤖 AI 预判</div>
+      <div class="ai-field">
+        <span class="ai-field-label">身份</span>
+        <span class="ai-field-value"><span class="tag tag-alone">🏠 独身者</span></span>
+      </div>
+      <div class="ai-field">
+        <span class="ai-field-label">类型</span>
+        <span class="ai-field-value">🌫️ 目标 · 待拆解</span>
+      </div>
+      <div class="ai-field">
+        <span class="ai-field-label">截止</span>
+        <span class="ai-field-value">📅 7月31日前</span>
+      </div>
+    </div>
+
+    <div class="submit-row">
+      <button class="submit-btn secondary">草稿</button>
+      <button class="submit-btn primary">✨ 确认 · AI 拆解</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== P5: 身份管理 ====== -->
+<div class="page" id="p5">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <button class="back-btn" onclick="show('p1')">← 返回日程</button>
+
+  <div style="font-size:20px;font-weight:700;margin-bottom:4px;">👤 我的身份</div>
+  <div style="font-size:13px;color:#86868b;margin-bottom:20px;">每种身份代表你生活中的一个角色</div>
+
+  <div class="identity-card">
+    <div class="identity-avatar designer-bg">🏢</div>
+    <div class="identity-info"><div class="identity-name">产品设计师</div><div class="identity-stats">📁 A 项目 · B 项目 ｜ ⏱ 本周 14.5h</div></div>
+    <span class="identity-arrow">›</span>
+  </div>
+  <div class="identity-card">
+    <div class="identity-avatar alone-bg">🏠</div>
+    <div class="identity-info"><div class="identity-name">独身者</div><div class="identity-stats">🗂️ 6个活跃事务 ｜ ⏱ 本周 11h</div></div>
+    <span class="identity-arrow">›</span>
+  </div>
+  <div class="identity-card">
+    <div class="identity-avatar travel-bg">✈️</div>
+    <div class="identity-info"><div class="identity-name">旅游爱好者</div><div class="identity-stats">🌫️ 2个目标待拆 ｜ ⏱ 本周 2.5h</div></div>
+    <span class="identity-arrow">›</span>
+  </div>
+  <div class="identity-card">
+    <div class="identity-avatar child-bg">👨‍👩‍👧</div>
+    <div class="identity-info"><div class="identity-name">独生子女</div><div class="identity-stats">💊 带妈妈体检 · 待跟进 ｜ ⏱ 本周 3h</div></div>
+    <span class="identity-arrow">›</span>
+  </div>
+
+  <div class="add-identity">
+    <div class="add-identity-icon">+</div>
+    <span style="font-size:14px;font-weight:500;color:#86868b;">创建新身份</span>
+  </div>
+</div>
+
+<!-- ====== P6: 跨项目共享 ====== -->
+<div class="page" id="p6">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <button class="back-btn" onclick="show('p1')">← 返回日程</button>
+
+  <div style="font-size:20px;font-weight:700;margin-bottom:4px;">🧩 跨项目共享</div>
+  <div style="font-size:13px;color:#86868b;margin-bottom:20px;">AI 发现的项目间知识和经验复用</div>
+
+  <div class="share-hint">
+    <div class="share-hint-icon">💡</div>
+    AI 发现了一些你在 A 项目做过的东西，B 项目可以直接用。不用重复造轮子。
+  </div>
+
+  <div class="share-connection">
+    <div class="share-from">
+      <div class="share-node designer-bg" style="width:36px;height:36px;font-size:16px;">A</div>
+      <div class="share-arrow">↓</div>
+      <div class="share-node share-to-node" style="width:36px;height:36px;font-size:16px;">B</div>
+    </div>
+    <div class="share-to">
+      <div class="share-item-name">🧩 用户画像模型</div>
+      <div class="share-desc">A 项目中完成的用户研究框架，B 项目的目标用户高度重合</div>
+      <div style="font-size:11px;color:#86868b;margin-bottom:8px;">📁 A 项目的经验资产</div>
+      <div class="share-actions-row">
+        <button class="share-action mark">📌 标记共享</button>
+        <button class="share-action ignore">暂时不</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="share-connection">
+    <div class="share-from">
+      <div class="share-node designer-bg" style="width:36px;height:36px;font-size:16px;">B</div>
+      <div class="share-arrow">↓</div>
+      <div class="share-node share-to-node" style="width:36px;height:36px;font-size:16px;">A</div>
+    </div>
+    <div class="share-to">
+      <div class="share-item-name">📋 需求评审流程模板</div>
+      <div class="share-desc">B 项目迭代出来的评审流程很高效，建议 A 项目沿用</div>
+      <div style="font-size:11px;color:#86868b;margin-bottom:8px;">🔁 流程复用</div>
+      <div class="share-actions-row">
+        <button class="share-action mark">📌 标记共享</button>
+        <button class="share-action ignore">暂时不</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="share-connection">
+    <div class="share-from">
+      <div class="share-node designer-bg" style="width:36px;height:36px;font-size:16px;">A</div>
+      <div class="share-arrow">↓</div>
+      <div class="share-node share-to-node" style="width:36px;height:36px;font-size:16px;">B</div>
+    </div>
+    <div class="share-to">
+      <div class="share-item-name">⚠️ 「开发阶段沟通不足」</div>
+      <div class="share-desc">A 项目因为这个踩坑延期了两周，B 项目即将进入开发阶段</div>
+      <div style="font-size:11px;color:#86868b;margin-bottom:8px;">🚨 经验预警</div>
+      <div class="share-actions-row">
+        <button class="share-action mark" style="background:#fce4ec;color:#c62828;">⚡ 注意</button>
+        <button class="share-action ignore">已处理</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== P7: 周报 ====== -->
+<div class="page" id="p7">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <button class="back-btn" onclick="show('p1')">← 返回日程</button>
+
+  <div class="week-header">
+    <div class="week-label">📊 本周回顾</div>
+    <div class="week-nav">
+      <button class="week-nav-btn">←</button>
+      <button class="week-nav-btn">→</button>
+    </div>
+  </div>
+  <div style="font-size:13px;color:#86868b;margin-bottom:20px;">4月28日 - 5月4日 · 第 18 周</div>
+
+  <div class="donut-row">
+    <div class="donut"></div>
+    <div class="donut-legend">
+      <div class="legend-item"><span><span class="legend-dot designer-dot"></span>🏢 产品设计师</span><span style="font-weight:600">35% · 14.5h</span></div>
+      <div class="legend-item"><span><span class="legend-dot alone-dot"></span>🏠 独身者</span><span style="font-weight:600">30% · 12h</span></div>
+      <div class="legend-item"><span><span class="legend-dot travel-dot"></span>✈️ 旅行</span><span style="font-weight:600">15% · 6h</span></div>
+      <div class="legend-item"><span><span class="legend-dot child-dot"></span>👨‍👩‍👧 子女</span><span style="font-weight:600">20% · 8h</span></div>
+    </div>
+  </div>
+
+  <div class="weekly-insight">
+    <div class="weekly-insight-title">💡 本周洞察</div>
+    <div class="weekly-insight-text">
+      这周 🏢 <strong>产品设计师</strong> 占了你最多时间（14.5 小时），主要是在 A 项目 PRD 评审和 B 业务对齐上。<br><br>
+      👨‍👩‍👧 <strong>子女</strong> 事务完成率 100%，你在这方面很负责。<br><br>
+      ⚠️ <strong>旅游</strong> 目标「北海道攻略」连续两周没有进展，建议抽个时间推进一下。
+    </div>
+  </div>
+
+  <div class="weekly-stats">
+    <div class="stat-row"><span class="stat-label">✅ 总完成事务</span><span class="stat-value green">23 / 28</span></div>
+    <div class="stat-row"><span class="stat-label">🌫️ 目标拆解</span><span class="stat-value">2 个新目标</span></div>
+    <div class="stat-row"><span class="stat-label">⚡ 冲突解决</span><span class="stat-value">3 次 · 倾向均衡</span></div>
+    <div class="stat-row"><span class="stat-label">📈 优先级浮动</span><span class="stat-value">英语 ⬆️ · 旅行 ⬇️</span></div>
+  </div>
+</div>
+
+<!-- ====== P8: 项目视图 ====== -->
+<div class="page" id="p8">
+  <div class="status-bar"><span>9:41</span><span>📶 🔋</span></div>
+  <button class="back-btn" onclick="show('p1')">← 返回日程</button>
+
+  <div style="font-size:20px;font-weight:700;margin-bottom:4px;">📁 项目视图</div>
+  <div style="font-size:13px;color:#86868b;margin-bottom:16px;">🏢 产品设计师 · 全部项目</div>
+
+  <div class="tabs" style="margin-bottom:20px">
+    <button class="tab active" onclick="filterProjects('all')">全部</button>
+    <button class="tab" onclick="filterProjects('project-a')">A 项目</button>
+    <button class="tab" onclick="filterProjects('project-b')">B 项目</button>
+  </div>
+
+  <!-- A 项目 -->
+  <div class="project-section" data-project="project-a">
+    <div class="project-section-header">
+      <div class="project-section-name">📁 A 项目 <span class="project-count-badge">3 个待办</span></div>
+    </div>
+    <div class="project-todo"><span class="project-todo-icon">📝</span>需求评审 5/12<span class="project-todo-date">下周一</span></div>
+    <div class="project-todo"><span class="project-todo-icon">🔍</span>竞品分析报告<span class="project-todo-date">5/15</span></div>
+    <div class="project-todo"><span class="project-todo-icon">🎨</span>设计系统迭代<span class="project-todo-date">5/20</span></div>
+  </div>
+
+  <!-- B 项目 -->
+  <div class="project-section" data-project="project-b">
+    <div class="project-section-header">
+      <div class="project-section-name">📁 B 项目 <span class="project-count-badge">2 个待办</span></div>
+    </div>
+    <div class="project-todo"><span class="project-todo-icon">🎨</span>UI 稿交付 5/14<span class="project-todo-date">下周三</span></div>
+    <div class="project-todo"><span class="project-todo-icon">💬</span>开发对齐会<span class="project-todo-date">5/16</span></div>
+  </div>
+
+  <!-- 共享知识库（只在全部时显示） -->
+  <div class="shared-kb" data-project="all">
+    <div class="shared-kb-title">🧩 A ← → B 共享知识库</div>
+    <div class="shared-kb-item">📄 用户画像模型 <span class="shared-kb-arrow">→ B 可用</span></div>
+    <div class="shared-kb-item">📋 需求评审流程 <span class="shared-kb-arrow">→ A 可用</span></div>
+    <div class="shared-kb-item">⚠️ 开发沟通踩坑 <span class="shared-kb-arrow" style="color:#c62828">→ B 注意</span></div>
+  </div>
+</div>
+
+<!-- ====== P10: 每周一页 ====== -->
+<div class="page" id="p10">
+  <div class="status-bar"><span>21:30</span><span>📶 🔋</span></div>
+  <button class="back-btn" onclick="show('p1')">← 返回日程</button>
+
+  <div style="text-align:center;margin-bottom:20px">
+    <span class="week-label-tag">📖 每周一页 · 5月4日 周日晚</span>
+  </div>
+
+  <!-- 书本引文 -->
+  <div class="quote-card">
+    <div class="quote-mark">"</div>
+    <div class="quote-text">大多数人高估了自己一年能做到的，却低估了自己十年能做到的。</div>
+    <div class="quote-author">— 比尔·盖茨</div>
+    <hr class="quote-divider">
+    <div class="quote-book">📘《原子习惯》· 第5章 · 关注系统，而非目标</div>
+  </div>
+
+  <!-- AI 的上下文解读 -->
+  <div class="context-note">
+    🐾 姐姐，这周我注意到：<br><br>
+    你给自己定了 <span class="highlight">4 个新目标</span>——英语、健身、做饭、学理财。但只完成了 3 次听力，<span class="highlight">其余都在「待拆解」里没动过</span>。<br><br>
+    我知道你是真的想变好。但有时候不是不想做，<span class="highlight">是想要的东西太多了。</span>
+  </div>
+
+  <!-- AI 抛一个选择 -->
+  <div class="week-question">
+    💬 如果这周我们只做一件事，你想选哪个？
+  </div>
+
+  <!-- 快捷选择 -->
+  <div class="quote-actions" style="margin-bottom:10px">
+    <button class="quote-action outline">🇬🇧 英语</button>
+    <button class="quote-action outline">🏃 健身</button>
+    <button class="quote-action outline">🍳 做饭</button>
+  </div>
+
+  <!-- 底部动作 -->
+  <div class="quote-actions">
+    <button class="quote-action primary">💬 跟阿里聊聊</button>
+  </div>
+  <div class="quote-actions" style="margin-top:6px">
+    <button class="quote-action outline">📌 收藏</button>
+    <button class="quote-action outline" style="flex:3">🔜 查看《原子习惯》更多</button>
+  </div>
+</div>
+
+<!-- ====== P9: 完成留痕 ====== -->
+<div class="page" id="p9">
+  <div class="status-bar"><span>15:48</span><span>📶 🔋</span></div>
+  <button class="back-btn" onclick="show('p1')">← 返回日程</button>
+
+  <div class="complete-header">
+    <div class="complete-icon">📝</div>
+    <div class="complete-task">PRD 评审会</div>
+    <div class="complete-meta">🏢 设计师 · A 项目 · 👥 与他人计划</div>
+  </div>
+
+  <!-- 上传区 -->
+  <div class="upload-area has-file">
+    <div class="upload-icon">📎</div>
+    <div class="upload-text">📄 会议纪要.png</div>
+    <div class="upload-hint">已添加 · 点击更换</div>
+  </div>
+
+  <!-- 文字备注 -->
+  <div style="margin-bottom:16px">
+    <textarea style="width:100%;padding:12px;border-radius:12px;border:1px solid #d2d2d7;font-size:13px;font-family:inherit;resize:none;outline:none" rows="3" placeholder="加一句话记录...">评审顺利通过，B产品那边提了个小改动回头跟进</textarea>
+  </div>
+
+  <!-- 第一步：提交按钮 -->
+  <button class="add-btn" style="margin-bottom:16px">📩 提交完成</button>
+
+  <!-- 分割线 -->
+  <div style="border-top:1px solid #e8e8ed;padding-top:16px;margin-bottom:4px;font-size:12px;color:#86868b;text-align:center">↓ 提交后 AI 生成 ↓</div>
+
+  <!-- 提交后：AI 点评（先出） -->
+  <div class="ai-comment-placeholder" style="opacity:.6">
+    <div class="ai-comment-label">🐾 阿里的点评</div>
+    <div class="ai-comment-text" style="color:#86868b">提交后，根据你的上传内容生成点评...</div>
+  </div>
+
+  <!-- 提交后：重排提示（再出） -->
+  <div class="gap-notice" style="opacity:.6">
+    <div class="gap-notice-icon">🔄</div>
+    <span style="color:#86868b">提交后将自动调整后续计划...</span>
+  </div>
+</div>
+
+</div>
+
+<script>
+  function show(id) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    const btnIndex = {'p1':0,'p2':1,'p3':2,'p4':3,'p5':4,'p6':5,'p7':6,'p8':7,'p9':8,'p10':9}[id];
+    document.querySelectorAll('.nav button').forEach((b,i) => b.classList.toggle('active', i===btnIndex));
+  }
+
+  // Timeline identity filter
+  function filterTimeline(identity) {
+    // Update tab styles
+    const tabs = document.querySelectorAll('#p1 .tabs .tab');
+    const identities = ['all','designer','alone','travel','child'];
+    const idx = identities.indexOf(identity);
+    tabs.forEach((t,i) => t.classList.toggle('active', i===idx));
+    // Show/hide blocks
+    document.querySelectorAll('#p1 .timeline-block').forEach(block => {
+      if (identity === 'all') { block.style.display = 'flex'; }
+      else { block.style.display = block.dataset.identity === identity ? 'flex' : 'none'; }
+    });
+    // Show/hide gaps too
+    document.querySelectorAll('#p1 .timeline-gap').forEach(gap => {
+      gap.style.display = identity === 'all' ? 'flex' : 'none';
+    });
+  }
+
+  // Project filter
+  function filterProjects(project) {
+    const tabs = document.querySelectorAll('#p8 .tabs .tab');
+    const projects = ['all','project-a','project-b'];
+    const idx = projects.indexOf(project);
+    tabs.forEach((t,i) => t.classList.toggle('active', i===idx));
+    document.querySelectorAll('#p8 .project-section').forEach(section => {
+      if (project === 'all') { section.style.display = 'block'; }
+      else { section.style.display = section.dataset.project === project ? 'block' : 'none'; }
+    });
+    // Shared KB only shows in "all"
+    const kb = document.querySelector('#p8 .shared-kb');
+    if (kb) kb.style.display = project === 'all' ? 'block' : 'none';
+  }
+  function select(letter) {
+    document.querySelectorAll('.conflict-card').forEach(c => c.classList.remove('selected'));
+    const target = document.querySelector('.conflict-card.' + letter);
+    if (target) target.classList.add('selected');
+  }
+  function toggleType(type) {
+    const btns = document.querySelectorAll('.type-btn');
+    btns.forEach(b => b.classList.remove('active'));
+    if (type === 'fuzzy') { btns[1].classList.add('active'); document.querySelector('.fuzzy-example').classList.add('show'); }
+    else { btns[0].classList.add('active'); document.querySelector('.fuzzy-example').classList.remove('show'); }
+  }
+</script>
+
+</body>
+</html>
