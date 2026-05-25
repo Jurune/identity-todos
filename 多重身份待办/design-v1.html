@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>多重身份待办 · 设计稿</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif; background: #f5f5f7; color: #1d1d1f; padding: 40px 20px; }
+  
+  .nav { display: flex; gap: 12px; justify-content: center; margin-bottom: 32px; flex-wrap: wrap; }
+  .nav button { padding: 10px 24px; border-radius: 20px; border: 1px solid #d2d2d7; background: white; cursor: pointer; font-size: 14px; font-weight: 500; color: #1d1d1f; transition: all .2s; }
+  .nav button.active { background: #1d1d1f; color: white; border-color: #1d1d1f; }
+  .nav button:hover { border-color: #0071e3; color: #0071e3; }
+
+  .phone-frame { max-width: 390px; margin: 0 auto; background: white; border-radius: 32px; box-shadow: 0 8px 40px rgba(0,0,0,.08); overflow: hidden; padding: 24px 20px 20px; min-height: 760px; position: relative; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* shared */
+  .status-bar { display: flex; justify-content: space-between; font-size: 12px; color: #86868b; margin-bottom: 16px; }
+  .greeting { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .greeting-sub { font-size: 13px; color: #86868b; margin-bottom: 16px; }
+  
+  /* identity tabs */
+  .tabs { display: flex; gap: 6px; margin-bottom: 20px; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .tab { padding: 6px 14px; border-radius: 16px; font-size: 13px; font-weight: 500; white-space: nowrap; border: none; cursor: pointer; background: #f5f5f7; color: #86868b; transition: all .2s; flex-shrink: 0; }
+  .tab.active { background: #1d1d1f; color: white; }
+  .tab.designer { background: #e8f5e9; color: #2e7d32; }
+  .tab.designer.active { background: #2e7d32; color: white; }
+  .tab.alone { background: #e3f2fd; color: #1565c0; }
+  .tab.alone.active { background: #1565c0; color: white; }
+  .tab.travel { background: #fff3e0; color: #e65100; }
+  .tab.travel.active { background: #e65100; color: white; }
+  .tab.child { background: #fce4ec; color: #c62828; }
+  .tab.child.active { background: #c62828; color: white; }
+  .tab-count { opacity: .6; margin-left: 4px; }
+
+  /* timeline */
+  .timeline { position: relative; padding-left: 44px; }
+  .timeline::before { content: ''; position: absolute; left: 16px; top: 8px; bottom: 8px; width: 2px; background: #e8e8ed; }
+  .timeline-item { position: relative; margin-bottom: 4px; padding: 8px 0; display: flex; align-items: flex-start; gap: 12px; }
+  .timeline-item::before { content: ''; position: absolute; left: -28px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: #c7c7cc; border: 2px solid white; }
+  .timeline-item.done::before { background: #34c759; }
+  .timeline-item.highlight::before { background: #0071e3; box-shadow: 0 0 0 4px rgba(0,113,227,.15); }
+  .timeline-time { font-size: 12px; color: #86868b; min-width: 40px; line-height: 1.6; }
+  .timeline-content { flex: 1; }
+  .timeline-title { font-size: 15px; font-weight: 500; line-height: 1.4; }
+  .timeline-meta { font-size: 12px; color: #86868b; margin-top: 2px; display: flex; gap: 8px; align-items: center; }
+  .timeline-tag { display: inline-block; padding: 1px 8px; border-radius: 8px; font-size: 11px; font-weight: 500; }
+  .tag-designer { background: #e8f5e9; color: #2e7d32; }
+  .tag-alone { background: #e3f2fd; color: #1565c0; }
+  .tag-travel { background: #fff3e0; color: #e65100; }
+  .tag-child { background: #fce4ec; color: #c62828; }
+  .tag-project { background: #f3e8ff; color: #7c3aed; }
+  .timeline-progress { width: 100%; height: 4px; background: #e8e8ed; border-radius: 2px; margin: 12px 0 4px; overflow: hidden; }
+  .timeline-progress-bar { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #34c759, #30d158); transition: width .5s; }
+
+  /* pending section */
+  .pending-section { margin-top: 20px; border-top: 1px solid #e8e8ed; padding-top: 16px; }
+  .pending-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  .pending-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: #f5f5f7; border-radius: 12px; margin-bottom: 8px; cursor: pointer; transition: all .2s; }
+  .pending-item:hover { background: #e8e8ed; }
+  .pending-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .pending-icon.fuzzy { background: #fef3e0; }
+  .pending-info { flex: 1; }
+  .pending-name { font-size: 14px; font-weight: 500; }
+  .pending-desc { font-size: 12px; color: #86868b; }
+  .pending-badge { padding: 4px 10px; border-radius: 10px; font-size: 11px; font-weight: 500; background: #0071e3; color: white; }
+
+  /* add button */
+  .add-btn { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 14px; background: #1d1d1f; color: white; border: none; border-radius: 14px; font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 16px; transition: all .2s; }
+  .add-btn:hover { background: #000; }
+
+  /* page 2: fuzzy detail */
+  .back { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: #0071e3; cursor: pointer; margin-bottom: 20px; border: none; background: none; padding: 0; }
+  .back:hover { text-decoration: underline; }
+  
+  .goal-header { margin-bottom: 20px; }
+  .goal-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .goal-meta { font-size: 13px; color: #86868b; }
+
+  .breakdown-title { font-size: 14px; font-weight: 600; color: #86868b; margin-bottom: 12px; text-transform: uppercase; letter-spacing: .5px; }
+
+  .task-card { display: flex; align-items: flex-start; gap: 12px; padding: 14px; background: #f5f5f7; border-radius: 14px; margin-bottom: 10px; border: 1px solid transparent; transition: all .2s; }
+  .task-card:hover { border-color: #d2d2d7; }
+  .task-check { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #c7c7cc; flex-shrink: 0; margin-top: 2px; cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; }
+  .task-check.checked { background: #34c759; border-color: #34c759; }
+  .task-check.checked::after { content: '✓'; color: white; font-size: 12px; font-weight: 700; }
+  .task-info { flex: 1; }
+  .task-name { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .task-time { font-size: 12px; color: #86868b; }
+  .task-priority { padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; background: #fef3e0; color: #e65100; }
+  .task-priority.high { background: #fce4ec; color: #c62828; }
+
+  .task-actions { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+  .task-btn { padding: 8px 20px; border-radius: 20px; border: 1px solid #d2d2d7; background: white; font-size: 13px; font-weight: 500; cursor: pointer; transition: all .2s; }
+  .task-btn.primary { background: #0071e3; color: white; border-color: #0071e3; }
+  .task-btn.primary:hover { background: #005bbf; }
+  .task-btn.danger { color: #ff3b30; border-color: #ff3b30; }
+  .task-btn.danger:hover { background: #fff5f5; }
+
+  /* page 3: conflict */
+  .conflict-intro { font-size: 14px; color: #86868b; margin-bottom: 20px; }
+  .conflict-date { font-size: 13px; font-weight: 600; color: #1d1d1f; margin-bottom: 16px; }
+  
+  .conflict-card { display: flex; gap: 14px; padding: 16px; border-radius: 16px; margin-bottom: 12px; cursor: pointer; transition: all .2s; border: 2px solid transparent; }
+  .conflict-card:hover { border-color: #d2d2d7; }
+  .conflict-card.selected { border-color: #0071e3; background: #f0f7ff; }
+  .conflict-card.a { background: #fce4ec; }
+  .conflict-card.b { background: #e3f2fd; }
+  .conflict-card.selected.a { border-color: #c62828; }
+  .conflict-card.selected.b { border-color: #1565c0; }
+  .conflict-letter { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: white; flex-shrink: 0; }
+  .conflict-letter.a-bg { background: #c62828; }
+  .conflict-letter.b-bg { background: #1565c0; }
+  .conflict-info { flex: 1; }
+  .conflict-title { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .conflict-meta { font-size: 12px; color: #86868b; display: flex; gap: 8px; align-items: center; }
+  .conflict-history { margin-top: 16px; padding: 12px; background: #f5f5f7; border-radius: 12px; font-size: 13px; color: #86868b; line-height: 1.6; }
+  .conflict-history strong { color: #1d1d1f; }
+  .conflict-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .conflict-btn { flex: 1; padding: 12px; border-radius: 14px; border: none; font-size: 14px; font-weight: 500; cursor: pointer; transition: all .2s; }
+  .conflict-btn.primary { background: #0071e3; color: white; }
+  .conflict-btn.primary:hover { background: #005bbf; }
+  .conflict-btn.secondary { background: #f5f5f7; color: #86868b; }
+  .conflict-btn.secondary:hover { background: #e8e8ed; }
+
+  /* status bar top */
+  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .page-header .avatar { width: 32px; height: 32px; border-radius: 50%; background: #f5f5f7; overflow: hidden; }
+  .page-header .avatar img { width: 100%; height: 100%; object-fit: cover; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <button class="active" onclick="showPage('page1')">📅 日程时间轴</button>
+  <button onclick="showPage('page2')">🌫️ 模糊目标拆解</button>
+  <button onclick="showPage('page3')">⚡ 排期冲突</button>
+</div>
+
+<div class="phone-frame">
+
+<!-- ====== PAGE 1: 日程时间轴 ====== -->
+<div class="page active" id="page1">
+
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+
+  <div class="greeting">🐾 早上好，姐姐</div>
+  <div class="greeting-sub">🗓️ 5月6日 · 周三 · 7件待办</div>
+
+  <!-- 进度条 -->
+  <div class="timeline-progress" style="margin-bottom:16px">
+    <div class="timeline-progress-bar" style="width:43%"></div>
+  </div>
+
+  <!-- 身份 tabs -->
+  <div class="tabs">
+    <button class="tab active">全部 <span class="tab-count">7</span></button>
+    <button class="tab designer">🏢 设计师 <span class="tab-count">2</span></button>
+    <button class="tab alone">🏠 独身者 <span class="tab-count">3</span></button>
+    <button class="tab travel">✈️ 旅行 <span class="tab-count">1</span></button>
+    <button class="tab child">👨‍👩‍👧 子女 <span class="tab-count">1</span></button>
+  </div>
+
+  <!-- 时间轴 -->
+  <div class="timeline">
+    <div class="timeline-item done">
+      <div class="timeline-time">08:00</div>
+      <div class="timeline-content">
+        <div class="timeline-title">🌅 起床</div>
+        <div class="timeline-meta"><span class="timeline-tag tag-alone">🏠 独身者</span> ✅ 已完成</div>
+      </div>
+    </div>
+
+    <div class="timeline-item done">
+      <div class="timeline-time">08:30</div>
+      <div class="timeline-content">
+        <div class="timeline-title">🎧 听力 30 分钟</div>
+        <div class="timeline-meta"><span class="timeline-tag tag-alone">🏠 独身者</span> ✅ 已完成</div>
+      </div>
+    </div>
+
+    <div class="timeline-item highlight">
+      <div class="timeline-time">09:00</div>
+      <div class="timeline-content">
+        <div class="timeline-title">📝 PRD 评审会</div>
+        <div class="timeline-meta">
+          <span class="timeline-tag tag-designer">🏢 设计师</span>
+          <span class="timeline-tag tag-project">A 项目</span>
+          <span style="color:#ff9500">🔔 15分钟前</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-time">10:30</div>
+      <div class="timeline-content">
+        <div class="timeline-title">💬 业务对齐会</div>
+        <div class="timeline-meta">
+          <span class="timeline-tag tag-designer">🏢 设计师</span>
+          <span class="timeline-tag tag-project">B 项目</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-time">12:00</div>
+      <div class="timeline-content">
+        <div class="timeline-title">🍜 午饭</div>
+        <div class="timeline-meta"><span class="timeline-tag tag-alone">🏠 独身者</span></div>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-time">14:00</div>
+      <div class="timeline-content">
+        <div class="timeline-title">💊 带妈妈去社区医院</div>
+        <div class="timeline-meta"><span class="timeline-tag tag-child">👨‍👩‍👧 子女</span></div>
+      </div>
+    </div>
+
+    <div class="timeline-item">
+      <div class="timeline-time">15:00</div>
+      <div class="timeline-content">
+        <div class="timeline-title">🗺️ 看国庆北海道攻略</div>
+        <div class="timeline-meta"><span class="timeline-tag tag-travel">✈️ 旅行</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 待确认区域 -->
+  <div class="pending-section">
+    <div class="pending-title">📌 待确认 <span style="font-weight:400;color:#86868b">(2)</span></div>
+    
+    <div class="pending-item" onclick="showPage('page2')">
+      <div class="pending-icon fuzzy">🌫️</div>
+      <div class="pending-info">
+        <div class="pending-name">7月英语突飞猛进</div>
+        <div class="pending-desc">待 AI 拆解 · 轻触查看</div>
+      </div>
+      <span class="pending-badge">拆解完成</span>
+    </div>
+
+    <div class="pending-item">
+      <div class="pending-icon fuzzy" style="background:#fce4ec">⬆️</div>
+      <div class="pending-info">
+        <div class="pending-name">每年存够 5 万旅行基金</div>
+        <div class="pending-desc">目标 · 待拆解</div>
+      </div>
+    </div>
+  </div>
+
+  <button class="add-btn">+ 添加待办</button>
+</div>
+
+<!-- ====== PAGE 2: 模糊目标拆解 ====== -->
+<div class="page" id="page2">
+
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+
+  <button class="back" onclick="showPage('page1')">← 返回日程</button>
+
+  <div class="goal-header">
+    <div class="goal-title">🌫️ 7月英语突飞猛进</div>
+    <div class="goal-meta">🏠 独身者 · 创建于 5月5日</div>
+  </div>
+
+  <div style="padding:12px; background:#f0f7ff; border-radius:12px; margin-bottom:20px; font-size:13px; color:#1d1d1f; line-height:1.5">
+    💡 姐姐，我帮你把这个目标拆成了以下任务。你可以勾选要排入日程的，也可以告诉我调整顺序。
+  </div>
+
+  <div class="breakdown-title">AI 拆解方案</div>
+
+  <div class="task-card">
+    <div class="task-check checked"></div>
+    <div class="task-info">
+      <div class="task-name">📅 每周一三五 · 听力 30 分钟</div>
+      <div class="task-time">08:00 - 08:30 · 通勤前</div>
+    </div>
+    <div class="task-priority high">排第一</div>
+  </div>
+
+  <div class="task-card">
+    <div class="task-check checked"></div>
+    <div class="task-info">
+      <div class="task-name">📅 每天通勤 · 背单词 20 个</div>
+      <div class="task-time">通勤路上 · 使用 App</div>
+    </div>
+    <div class="task-priority">排第二</div>
+  </div>
+
+  <div class="task-card">
+    <div class="task-check"></div>
+    <div class="task-info">
+      <div class="task-name">📅 每周六 · 外教口语 1 小时</div>
+      <div class="task-time">14:00 - 15:00 · Cambly</div>
+    </div>
+    <div class="task-priority">排第三</div>
+  </div>
+
+  <div class="task-card">
+    <div class="task-check"></div>
+    <div class="task-info">
+      <div class="task-name">📅 7月28日 · 雅思模拟考</div>
+      <div class="task-time">全程 3 小时 · 线下考点</div>
+    </div>
+    <div class="task-priority">排第四</div>
+  </div>
+
+  <div class="task-card" style="border: 1px dashed #d2d2d7;">
+    <div class="task-info" style="flex:1">
+      <div style="font-size:13px; color:#86868b;">想调整顺序或内容？直接告诉我 👇</div>
+      <div style="font-size:14px; font-weight:500; margin-top:4px; color:#0071e3;">"把外教口语提到最前面"</div>
+    </div>
+  </div>
+
+  <div class="task-actions">
+    <button class="task-btn primary">✅ 排入日程</button>
+    <button class="task-btn">✏️ 修改方案</button>
+    <button class="task-btn danger">🗑️ 删除目标</button>
+  </div>
+</div>
+
+<!-- ====== PAGE 3: 排期冲突 ====== -->
+<div class="page" id="page3">
+
+  <div class="status-bar">
+    <span>9:41</span>
+    <span>📶 🔋</span>
+  </div>
+
+  <button class="back" onclick="showPage('page1')">← 返回日程</button>
+
+  <div style="margin-bottom:12px">
+    <span style="font-size:20px; font-weight:700;">⚡ 排期冲突</span>
+  </div>
+  <div class="conflict-intro">
+    5月10日（周六）下午 14:00 - 15:00 有两个事务撞车了。
+  </div>
+
+  <div class="conflict-date">📅 5月10日 · 周六 · 14:00–15:00</div>
+
+  <div class="conflict-card a selected" onclick="selectConflict('a')">
+    <div class="conflict-letter a-bg">A</div>
+    <div class="conflict-info">
+      <div class="conflict-title">💊 带妈妈体检</div>
+      <div class="conflict-meta">
+        <span class="timeline-tag tag-child">👨‍👩‍👧 子女</span>
+        <span>协和医院 · 需预约</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="conflict-card b" onclick="selectConflict('b')">
+    <div class="conflict-letter b-bg">B</div>
+    <div class="conflict-info">
+      <div class="conflict-title">🗣️ 外教口语课</div>
+      <div class="conflict-meta">
+        <span class="timeline-tag tag-alone">🏠 独身者</span>
+        <span>Cambly · 每周例行</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="conflict-history">
+    你最近 3 次的选择记录：<br>
+    🅰️ 带妈妈体检 — <strong>选了 2 次</strong><br>
+    🅱️ 外教口语课 — <strong>选了 1 次</strong><br>
+    系统学习到：🅰️ 类型事务的优先级在上升
+  </div>
+
+  <div style="font-size:12px; color:#86868b; margin:12px 0;">你也可以调整后再确认 👇</div>
+
+  <div class="conflict-actions">
+    <button class="conflict-btn primary">✅ 确认选 A</button>
+    <button class="conflict-btn secondary">⏰ 改天</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+  function showPage(id) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.nav button').forEach((b, i) => {
+      b.classList.toggle('active', i === (id === 'page1' ? 0 : id === 'page2' ? 1 : 2));
+    });
+  }
+
+  let selected = 'a';
+  function selectConflict(letter) {
+    selected = letter;
+    document.querySelectorAll('.conflict-card').forEach(c => c.classList.remove('selected'));
+    document.querySelector('.conflict-card.' + letter).classList.add('selected');
+  }
+</script>
+
+</body>
+</html>
