@@ -12,6 +12,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [noteTarget, setNoteTarget] = useState<string | null>(null)
   const [noteText, setNoteText] = useState('')
+  const [activeIdentity, setActiveIdentity] = useState<string | null>(null) // null = 全部
   const date = today()
 
   useEffect(() => {
@@ -68,8 +69,15 @@ export default function Home() {
     setNoteText('')
   }
 
-  const doneCount = plan?.items.filter(i => i.done).length ?? 0
-  const totalCount = plan?.items.length ?? 0
+  // 按当前 tab 过滤日程
+  const filteredItems = plan?.items.filter(item => {
+    if (activeIdentity === null) return true
+    if (activeIdentity === '__none__') return !item.identityId
+    return item.identityId === activeIdentity
+  }) ?? []
+
+  const doneCount = filteredItems.filter(i => i.done).length
+  const totalCount = filteredItems.length
 
   if (!profile) {
     return (
@@ -101,24 +109,97 @@ export default function Home() {
             <div className="mt-3">
               <div className="flex items-center justify-between text-xs text-gray-400 mb-1.5">
                 <span>已完成 {doneCount}/{totalCount}</span>
-                {doneCount === totalCount && <span className="text-green-600 font-medium">今天全搞定 🎉</span>}
+                {doneCount === totalCount && totalCount > 0 && (
+                  <span className="text-green-600 font-medium">
+                    {activeIdentity === null ? '今天全搞定 🎉' : '这个身份全搞定 🎉'}
+                  </span>
+                )}
               </div>
               <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gray-800 rounded-full transition-all duration-500"
-                  style={{ width: `${(doneCount / totalCount) * 100}%` }}
+                  style={{ width: totalCount > 0 ? `${(doneCount / totalCount) * 100}%` : '0%' }}
                 />
               </div>
             </div>
           )}
         </div>
 
+        {/* Identity tabs */}
+        {profile.identities.length > 0 && (
+          <div className="px-5 mb-3">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {/* 全部 tab */}
+              <button
+                onClick={() => setActiveIdentity(null)}
+                className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                  activeIdentity === null
+                    ? 'bg-gray-900 text-white'
+                    : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                全部
+              </button>
+
+              {/* 每个身份 tab */}
+              {profile.identities.map(identity => {
+                const color = getColor(identity.color)
+                const isActive = activeIdentity === identity.id
+                return (
+                  <button
+                    key={identity.id}
+                    onClick={() => setActiveIdentity(isActive ? null : identity.id)}
+                    className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      isActive
+                        ? `${color.bg} ${color.text} border ${color.border}`
+                        : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    <span>{identity.emoji}</span>
+                    <span>{identity.name}</span>
+                    {/* 小进度点 */}
+                    {plan && (() => {
+                      const items = plan.items.filter(i => i.identityId === identity.id)
+                      const done = items.filter(i => i.done).length
+                      if (items.length === 0) return null
+                      return (
+                        <span className={`text-xs opacity-60`}>
+                          {done}/{items.length}
+                        </span>
+                      )
+                    })()}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* AI opening message */}
-        {plan?.aiMessage && (
+        {plan?.aiMessage && activeIdentity === null && (
           <div className="mx-5 mb-4 px-4 py-3 bg-blue-50 rounded-2xl">
             <p className="text-blue-800 text-sm font-medium">💬 {plan.aiMessage}</p>
           </div>
         )}
+
+        {/* 当前身份的目标提示 */}
+        {activeIdentity && activeIdentity !== '__none__' && (() => {
+          const identity = profile.identities.find(i => i.id === activeIdentity)
+          if (!identity || identity.goals.length === 0) return null
+          const color = getColor(identity.color)
+          return (
+            <div className={`mx-5 mb-4 px-4 py-3 rounded-2xl ${color.bg}`}>
+              <p className={`text-xs font-semibold ${color.text} mb-1.5`}>🎯 {identity.name}的目标</p>
+              <div className="space-y-1">
+                {identity.goals.map(goal => (
+                  <p key={goal.id} className={`text-xs ${color.text} opacity-80`}>
+                    · {goal.title}{goal.frequency ? ` · ${goal.frequency}` : ''}
+                  </p>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* No plan yet */}
         {!plan && (
@@ -137,35 +218,44 @@ export default function Home() {
         )}
 
         {/* Schedule list */}
-        {plan && plan.items.length > 0 && (
+        {plan && (
           <div className="px-5 space-y-2">
-            {plan.items.map(item => (
-              <ScheduleBlock
-                key={item.id}
-                item={item}
-                profile={profile}
-                onToggle={() => toggleDone(item.id)}
-                onNote={() => {
-                  setNoteTarget(item.id)
-                  setNoteText(item.note || '')
-                }}
-              />
-            ))}
+            {filteredItems.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-gray-400 text-sm">这个身份今天没有安排</p>
+              </div>
+            ) : (
+              filteredItems.map(item => (
+                <ScheduleBlock
+                  key={item.id}
+                  item={item}
+                  profile={profile}
+                  onToggle={() => toggleDone(item.id)}
+                  onNote={() => {
+                    setNoteTarget(item.id)
+                    setNoteText(item.note || '')
+                  }}
+                />
+              ))
+            )}
 
-            <Link
-              href="/review"
-              className="block w-full mt-3 py-3.5 rounded-2xl bg-gray-900 text-white text-sm font-medium text-center"
-            >
-              今日复盘
-            </Link>
-
-            <button
-              onClick={generatePlan}
-              disabled={loading}
-              className="w-full mt-2 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors"
-            >
-              {loading ? '重新规划中…' : '↺ 重新规划今天'}
-            </button>
+            {activeIdentity === null && (
+              <>
+                <Link
+                  href="/review"
+                  className="block w-full mt-3 py-3.5 rounded-2xl bg-gray-900 text-white text-sm font-medium text-center"
+                >
+                  今日复盘
+                </Link>
+                <button
+                  onClick={generatePlan}
+                  disabled={loading}
+                  className="w-full mt-2 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                >
+                  {loading ? '重新规划中…' : '↺ 重新规划今天'}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
