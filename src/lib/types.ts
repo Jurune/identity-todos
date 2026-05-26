@@ -48,4 +48,11 @@ export interface DailyPlan {
   items: ScheduleItem[]
   aiMessage?: string // opening message from AI
   generatedAt: string
+  review?: DailyReview
+}
+
+export interface DailyReview {
+  userMessage: string
+  aiResponse: string
+  createdAt: string
 }

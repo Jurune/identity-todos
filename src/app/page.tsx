@@ -152,10 +152,17 @@ export default function Home() {
               />
             ))}
 
+            <Link
+              href="/review"
+              className="block w-full mt-3 py-3.5 rounded-2xl bg-gray-900 text-white text-sm font-medium text-center"
+            >
+              今日复盘
+            </Link>
+
             <button
               onClick={generatePlan}
               disabled={loading}
-              className="w-full mt-3 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors"
+              className="w-full mt-2 py-3.5 rounded-2xl border border-gray-200 text-gray-400 text-sm disabled:opacity-40 hover:bg-gray-50 transition-colors"
             >
               {loading ? '重新规划中…' : '↺ 重新规划今天'}
             </button>
